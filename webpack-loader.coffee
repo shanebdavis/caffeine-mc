@@ -1,7 +1,10 @@
+fs = require 'fs'
+
+{log, getEnv} = require 'art-standard-lib'
+loaderUtils = require 'loader-utils'
+
 CaffeineMc = require './index'
 CaffeineEight = require 'caffeine-eight'
-loaderUtils = require 'loader-utils'
-{log, getEnv} = require 'art-standard-lib'
 
 ###
 TODO: Fix SOURCEMAPS (SBD 2018-07-30 notes)
@@ -18,6 +21,12 @@ SO - cafSourceMaps is off by default, but you can turn it on if you want:
 {cafSourceMaps} = getEnv
 
 module.exports = (source) ->
+  ###
+  Compile source file if it's present on file system.
+  If it's inline source or just string compilation - than compile source itself.
+  (for example, when using inline code in .vue files)
+  ###
+
   @cacheable?()
   # CaffeineMc manages its own cachability, but I'm unclear what disabling webpack's caching
   # does... Does it cache across runs? What triggers a re-load if cacheable is false?
@@ -28,8 +37,9 @@ module.exports = (source) ->
   # Even with addDependency, it wouldn't catch a file being added which alters module-resolution.
 
   sourceFile = loaderUtils.getRemainingRequest @
-  try
-    {compiled:{js, sourceMap}} = CaffeineMc.FileCompiler.compileFileSync sourceFile, {
+  fileExists = fs.existsSync(sourceFile)
+
+  compileOptions = {
       source
       @debug
       sourceRoot: ""                # make sourceMaps references relative to webpack's start directory
@@ -37,6 +47,12 @@ module.exports = (source) ->
       inlineMap:  !!cafSourceMaps   # experimental - works in Safari, not Chrome
       prettier:   !cafSourceMaps    # prettier is incompatible with sourceMaps
     }
+
+  try
+    if fileExists
+      {compiled: {js, sourceMap}} = CaffeineMc.FileCompiler.compileFileSync sourceFile, compileOptions
+    else
+      {compiled: {js, sourceMap}} = CaffeineMc.compile source, compileOptions
     @callback null, js, sourceMap
 
   catch e
